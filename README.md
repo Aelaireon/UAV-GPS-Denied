@@ -1,6 +1,6 @@
 # UAV Flight Code
 
-This repository contains code to fly the UAV.
+UAV stands for Unmanned Aerial Vehicle. This repository contains code to fly the UAV.
 
 ## How to Use
 
