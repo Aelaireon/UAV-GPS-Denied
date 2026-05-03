@@ -7,18 +7,22 @@ all:
 open-serial:
 	sudo chmod 777 /dev/ttyAMA0
 	sudo chmod 777 /dev/ttyACM0
+
+tfmini:
+	ros2 run uav_demo tfmini.py
 gcs-deactivate-estop:
 	ros2 topic pub --once /gcs_estop std_msgs/msg/Bool "{data: false}"
 challenge-1:
 	python3 src/challenge_demo/src/challenge_1.py
 pos-lab:
 	ros2 service call /uav/mavros/global_position/set_origin_global mavros_msgs/srv/SetOrigin "{latitude: 32.733417, longitude: -97.113556, altitude: 0.0}"
-mavros-arm:
+arm:
 	ros2 service call /uav/mavros/cmd/arming mavros_msgs/srv/CommandBool "{value: true}"	
-mavros-disarm:
+disarm:
 	ros2 service call /uav/mavros/cmd/arming mavros_msgs/srv/CommandBool "{value: false}"
-mavros-launch:
-	ros2 launch mavros apm.launch fcu_url:=/dev/ttyACM0:921600 config_yaml:=~/UAV/src/uav_demo/config/apm_config.yaml
+mavros:
+	make open-serial
+	ros2 launch uav_demo apm.launch
 viewframes:
 	ros2 run tf2_tools view_frames
 gcs:

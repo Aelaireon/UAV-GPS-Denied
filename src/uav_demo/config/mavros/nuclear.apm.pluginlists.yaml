@@ -1,0 +1,68 @@
+/**:
+  ros__parameters:
+    plugin_denylist:
+    # Mavros really only needs sys, mission, param (maybe, expensive), geofence, rallypoint, homepose, gps, and local_position plugins. The rest are mostly for telemetry and not needed for control.
+      - actuator_control
+      - altitude
+      # - command
+      - ftp
+      # - geofence
+      # - global_position
+      # - home_position
+      - imu
+      # - local_position
+      - manual_control
+      - nav_controller_output
+      # - param
+      # - rallypoint
+      # - rc_io
+      - setpoint_accel
+      - setpoint_attitude
+      # - setpoint_position
+      - setpoint_raw
+      - setpoint_trajectory
+      # - setpoint_velocity
+      # - sys_status
+      # - sys_time
+      # - waypoint
+      - wind_estimation 
+      # - adsb
+      - cam_imu_sync
+      - camera
+      - cellular_status
+      # - companion_process_status
+      - debug_value
+      # - distance_sensor
+      # - esc_status
+      # - esc_telemetry
+      - fake_gps
+      - gimbal_control
+      - gps_input
+      - gps_rtk
+      # - gps_status
+      # - guided_target
+      - hil
+      # - landing_target
+      # - log_transfer
+      # - mag_calibration_status
+      - mocap_pose_estimate
+      - mount_control
+      - obstacle_distance
+      - obstacle_distance_3d
+      # - odometry
+      - onboard_computer_status
+      - open_drone_id
+      # - optical_flow
+      - play_tune
+      - px4flow
+      # - rangefinder
+      - sim_state
+      - tdr_radio
+      - terrain
+      - trajectory
+      - tunnel
+      - vfr_hud
+      - vibration
+      # - vision_pose
+      # - vision_speed
+      - wheel_odometry

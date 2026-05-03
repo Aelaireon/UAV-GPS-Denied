@@ -16,7 +16,7 @@ alias cdd="cd ~/Desktop/"
 alias cdudev="cd /etc/udev/rules.d/"
 alias cdnetplan="cd /etc/netplan/"
 alias cdxorg="cd /etc/X11/xorg.conf.d/"
-alias cdws="cd ~/2026-RTX-AVC-UTA-UGV; sra"
+alias cdws="cd ~/UAV-GPS-Denied; sra"
 alias cdcws="cdws; code ."
 
 # ROS specific
