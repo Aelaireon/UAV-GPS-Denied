@@ -38,46 +38,22 @@ takeoff:
 	make guided
 	make arm
 	ros2 service call /uav/mavros/cmd/takeoff mavros_msgs/srv/CommandTOL "{altitude: 1.0}"
+setpoint-2.0m:
+	ros2 topic pub --rate 20 --times 100 /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped "{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 2.0}, orientation: {w: 1.0}}}"
+setpoint-0.3m:
+	ros2 topic pub --rate 20 --times 100 /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped "{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 0.3}, orientation: {w: 1.0}}}"
 test-mavros:
-	make takeoff
-	sleep 10
-	make land
-chatbot:
-	# 1. Set mode
-	make guided-nogps
-# 	make alt-hold
-
-	# 2. Arm
-	ros2 service call /uav/mavros/cmd/arming mavros_msgs/srv/CommandBool "{value: true}"
-
-# 	# 3. Stream UP velocity to take off (keep running in background)
-# 	ros2 topic pub /uav/mavros/setpoint_velocity/cmd_vel_unstamped geometry_msgs/msg/Twist \
-# 	"{linear: {x: 0.0, y: 0.0, z: 0.5}, angular: {z: 0.0}}" -r 20 &
-
-	# 4. Takeoff for 5 seconds
-	sleep 10
-
-	# 5. Stop climbing, hover
-# 	ros2 topic pub /uav/mavros/setpoint_velocity/cmd_vel_unstamped geometry_msgs/msg/Twist \
-# 	"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}" -r 20 &
-	sleep 10
-
-	# 6. Land
-	ros2 service call /uav/mavros/set_mode mavros_msgs/srv/SetMode "{custom_mode: 'LAND'}"
-# chatbot-fake-takeoff:
-# 	ros2 topic pub /uav/mavros/setpoint_velocity/cmd_vel_unstamped geometry_msgs/msg/Twist \
-# 	"{linear: {x: 0.0, y: 0.0, z: 1.0}, angular: {z: 0.0}}" -r 20
-chatbot-fake-land:
-	ros2 topic pub /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped \
-	"{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}" -r 20
-# chatbot-fake-takeoff:
-# 	ros2 topic pub /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped \
-# 	"{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 2.0}, orientation: {w: 1.0}}}" -r 20
-chatbot-fake-hover:
-	ros2 topic pub /uav/mavros/setpoint_velocity/cmd_vel_unstamped geometry_msgs/msg/Twist \
-	"{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}" -r 20
+	echo -e "\033[1;36m############### TAKING OFF TO 1 METER ...###############\033[0m"
+	make takeoff | grep -E "success=|mode_sent=|GUIDED|arming"
+	sleep 5
+	echo -e "\033[1;36m################# GOING TO 2 METERS ...##################\033[0m"
+	make setpoint-2.0m | grep "beginning"
+	echo -e "\033[1;36m################ GOING TO 0.3 METERS ...#################\033[0m"
+	make setpoint-0.3m | grep "beginning"
+	echo -e "\033[1;36m###################### LANDING ...#######################\033[0m"
+	make land | grep "mode_sent="
 mavros:
-	make open-serial
+#	make open-serial
 	ros2 launch uav_demo apm.launch
 viewframes:
 	ros2 run tf2_tools view_frames
