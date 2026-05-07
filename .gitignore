@@ -1,6 +1,11 @@
 # Random .vscode
 .vscode/
 
+# Camera testing
+*.mjpeg
+*.yuv
+*.jpg
+
 # ROS specific
 build/
 install/

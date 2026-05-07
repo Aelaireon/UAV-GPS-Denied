@@ -43,6 +43,7 @@ source install/setup.bash
 ### ------------------------------- Reminders -------------------------------
 echo -e "\e[33mREMINDER: \e[0mAdd 'source /opt/ros/jazzy/setup.bash' for automatic ROS 2 setup on new terminal launch."
 echo -e  "\e[33mREMINDER: \e[0mOn new terminals, source the workspace setup file 'source /path/to/your/workspace/install/setup.bash' so ROS 2 can see your packages."
+echo -e  "\e[33mREMINDER: \e[0mttyACM0 permission can be set permanently with: sudo usermod -a -G dialout $USER"
 echo -e  "\e[33mTIPS: \e[0mAdd export ROS_DOMAIN_ID=<your_domain_id> to your .bashrc for automatic domain ID setup on new terminal launch."
 echo -e  "\e[33mTIPS: \e[0mAdd export RCUTILS_COLORIZED_OUTPUT=1 to your .bashrc for colored output in the terminal."
 echo -e  "\e[33mTIPS: \e[0mAdd cdws (cd workspace) to your .bashrc for easy navigation to your workspace."
