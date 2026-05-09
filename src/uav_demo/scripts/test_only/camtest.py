@@ -46,6 +46,8 @@ def main():
                     np.frombuffer(jpg, dtype=np.uint8),
                     cv2.IMREAD_COLOR
                 )
+                
+                frame = cv2.rotate(frame, cv2.ROTATE_180)
 
                 if frame is not None:
                     cv2.imshow("UAV Camera Feed", frame)
@@ -55,7 +57,8 @@ def main():
 
     except KeyboardInterrupt:
         print("\nStopping...")
-
+    except Exception as e:
+        print(f"Error occured {e}")
     finally:
         proc.terminate()
         proc.wait()
