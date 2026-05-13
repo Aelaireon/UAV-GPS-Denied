@@ -25,13 +25,13 @@ import cv2
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Range
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
 
 
 # ── Camera settings (match your hardware) ────────────────────────────────────
-CAMERA_INDEX = 0          # left camera (use 0 for the one facing down / forward)
+CAMERA_INDEX = 1          # right camera (use 0 for the one facing down / forward)
 FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 FPS          = 30
@@ -102,8 +102,8 @@ class OpticalFlowNode(Node):
         super().__init__('optical_flow_node')
 
         # ── Camera intrinsics (replace with your calibration YAML values) ──
-        self.fx = 820.0
-        self.fy = 820.0
+        self.fx = 982.0
+        self.fy = 982.0
 
         # ── State ────────────────────────────────────────────────────────────
         self.altitude  = 1.0    # metres — updated by TFMini
@@ -141,8 +141,10 @@ class OpticalFlowNode(Node):
         self.pub_flow = self.create_publisher(
             TwistStamped, '/drone/optical_flow_vel', 10)
 
-        self.pub_odom = self.create_publisher(
-            Odometry, '/drone/optical_flow_odom', 10)
+        # self.pub_odom = self.create_publisher(
+        #     Odometry, '/drone/optical_flow_odom', 10)
+        self.pub_pose = self.create_publisher(
+            PoseStamped, '/uav/mavros/vision_pose/pose', 10)
 
         self.srv_reset = self.create_service(
             Empty, '/drone/reset_pose', self._reset_pose_cb)
@@ -207,6 +209,8 @@ class OpticalFlowNode(Node):
         #   linear.x = forward/back,  linear.y = left/right
         vx = float((mean_flow[1] / self.fy) * self.altitude / dt)   # forward  (was image-y)
         vy = float((mean_flow[0] / self.fx) * self.altitude / dt)   # left     (was image-x)
+        vx = -vx
+        vy = -vy
 
         # ── Integrate position ────────────────────────────────────────────────
         dx = vx * dt
@@ -267,8 +271,12 @@ class OpticalFlowNode(Node):
         tc[28] = 1e6
         tc[35] = 1e6
         odom.twist.covariance = tc
+        pose = PoseStamped()
+        pose.header = odom.header
+        pose.pose   = odom.pose.pose
 
-        self.pub_odom.publish(odom)
+        # self.pub_odom.publish(odom)
+        self.pub_pose.publish(pose)
 
         # ── Roll forward ─────────────────────────────────────────────────────
         self.prev_gray   = gray
