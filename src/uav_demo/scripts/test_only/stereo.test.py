@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+
 import subprocess
 import numpy as np
 import cv2
 import os
 
 # 1. Setup Display for your dummy driver
+print("Setting DISPLAY environment variable for dummy driver...")
 os.environ['DISPLAY'] = ':1001'
 #os.environ['DISPLAY'] = ':1'
 
 def get_cam_proc(camera_index):
+    print(f"Starting camera process for camera index {camera_index}...")
     cmd = [
         "rpicam-vid",
         "--camera", str(camera_index),
@@ -21,7 +25,7 @@ def get_cam_proc(camera_index):
         "--gain", "2.0",       # Boost gain to compensate for fast shutter
         "--awb", "indoor", # Fix white balance for consistent marker detection
         "--inline",
-        "-o", "-"
+        "-o", "-",
         # Inside get_cam_proc, add:
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -32,6 +36,7 @@ proc_l = get_cam_proc(0)
 proc_r = get_cam_proc(1)
 
 # 3. Setup ArUco
+print("Setting up ArUco detectors...")
 #aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 aruco_dict5 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_50)
 aruco_dict6 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)

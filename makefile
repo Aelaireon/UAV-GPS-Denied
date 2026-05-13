@@ -52,6 +52,18 @@ test-mavros:
 	make setpoint-0.3m | grep "beginning"
 	echo -e "\033[1;36m###################### LANDING ...#######################\033[0m"
 	make land | grep "mode_sent="
+stereo-test:
+	ros2 run uav_demo stereo.test.py
+stereo-dist:
+	ros2 run uav_demo stereo.dist.py
+stereo-calib:
+	ros2 run uav_demo stereo.calib.py
+stereo-calib-chk:
+	ros2 run uav_demo stereo.calib.chk.py
+stereo-vision-calib:
+	ros2 run uav_demo stereo.vision.calib.py
+stereo-vision-dist:
+	ros2 run uav_demo stereo.vision.dist.py
 mavros:
 #	make open-serial
 	ros2 launch uav_demo apm.launch
