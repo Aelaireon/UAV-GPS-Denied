@@ -142,11 +142,11 @@ class OpticalFlowNode(Node):
         pitch = np.arcsin(np.clip(2.0*(q.w*q.y - q.z*q.x), -1.0, 1.0))
         true_alt = self.altitude * np.cos(roll) * np.cos(pitch)
 
-        COMP_GAIN = 0.7
+        COMP_GAIN = 0.5
         # Subtract flow caused purely by rotation (omega * dt)
         w = self._imu.angular_velocity
-        flow_norm[0] -= (w.y * dt) * COMP_GAIN
-        flow_norm[1] -= (-w.x * dt) * COMP_GAIN
+        flow_norm[1] -= (w.y * dt) * COMP_GAIN
+        flow_norm[0] += (w.x * dt) * COMP_GAIN * 0.7
 
         # ── VELOCITY IN METERS ────────────────────────────────────────────────
         # VX = vertical image flow * alt
