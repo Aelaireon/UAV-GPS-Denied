@@ -17,7 +17,8 @@ class TFMiniNode(Node):
         # Serial Setup
         self.sensor = None
         self.publish_fake_vision = False # use until optical flow is working
-        self.ground_offset = 0.13
+        self.ground_offset = -0.07
+        # self.ground_offset = 0.0
         self.current_range_m = 0.0
 
         try:
