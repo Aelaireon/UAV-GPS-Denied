@@ -8,11 +8,12 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Range, Imu
-from geometry_msgs.msg import TwistStamped, PoseStamped
+from geometry_msgs.msg import Quaternion, TwistStamped, PoseStamped
 from std_srvs.srv import Empty
 
 # ── Load Camera Configuration ────────────────────────────────────────────────
-NPZ_PATH = "/home/uav/UAV-GPS-Denied/src/uav_demo/scripts/test_only/calib_final_036/calib_intrinsics.npz"
+# NPZ_PATH = "/home/uav/UAV-GPS-Denied/src/uav_demo/scripts/test_only/calib_final_036/calib_intrinsics.npz"
+NPZ_PATH = ""
 
 if os.path.exists(NPZ_PATH):
     with np.load(NPZ_PATH) as data:
@@ -69,10 +70,11 @@ class OpticalFlowNode(Node):
         self._imu: Imu = None
         self.prev_gray = None
         self._last_stamp = None
+        self.visual_yaw = 0.0
         
-        # World-frame positions (North/East)
+        # World-frame positions (North/West)
         self._pos_n = 0.0
-        self._pos_e = 0.0
+        self._pos_w = 0.0
 
         self._cam = CameraReader(CAMERA_INDEX)
         self._cam.start()
@@ -81,7 +83,11 @@ class OpticalFlowNode(Node):
         self.create_subscription(Range, '/uav/mavros/rangefinder_sub', self._alt_cb, 10)
         self.create_subscription(Imu, '/uav/mavros/imu/data', self._imu_cb, qos)
         
-        self.pub_vel = self.create_publisher(TwistStamped, '/drone/optical_flow_vel', 10)
+        self.pub_vel = self.create_publisher(
+            TwistStamped,
+            '/uav/mavros/vision_speed/speed_twist',
+            10,
+        )
         self.pub_pose = self.create_publisher(PoseStamped, '/uav/mavros/vision_pose/pose', 10)
         self.create_service(Empty, '/drone/reset_pose', self._reset_pose_cb)
         self.timer = self.create_timer(1.0 / FPS, self._flow_callback)
@@ -104,10 +110,25 @@ class OpticalFlowNode(Node):
         ps = PoseStamped()
         ps.header.stamp, ps.header.frame_id = stamp, 'odom'
         ps.pose.position.x = self._pos_n
-        ps.pose.position.y = self._pos_e
+        ps.pose.position.y = self._pos_w
         ps.pose.position.z = float(altitude)
         ps.pose.orientation = orientation
         self.pub_pose.publish(ps)
+
+    def _orientation_from_rpy(self, roll, pitch, yaw):
+        cy = np.cos(yaw * 0.5)
+        sy = np.sin(yaw * 0.5)
+        cp = np.cos(pitch * 0.5)
+        sp = np.sin(pitch * 0.5)
+        cr = np.cos(roll * 0.5)
+        sr = np.sin(roll * 0.5)
+
+        orientation = Quaternion()
+        orientation.w = cr * cp * cy + sr * sp * sy
+        orientation.x = sr * cp * cy - cr * sp * sy
+        orientation.y = cr * sp * cy + sr * cp * sy
+        orientation.z = cr * cp * sy - sr * sp * cy
+        return orientation
 
     def _publish_velocity(self, stamp, vx, vy):
         tw = TwistStamped()
@@ -130,11 +151,16 @@ class OpticalFlowNode(Node):
         sinp = 2 * (q.w * q.y - q.z * q.x)
         pitch = np.arcsin(np.clip(sinp, -1.0, 1.0))
         true_alt = self.altitude * np.cos(roll) * np.cos(pitch)
+        visual_orientation = self._orientation_from_rpy(
+            roll,
+            pitch,
+            self.visual_yaw,
+        )
 
         frame = self._cam.get_frame()
         if frame is None:
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
-            self._publish_pose(now.to_msg(), true_alt, q)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -143,13 +169,13 @@ class OpticalFlowNode(Node):
             self.prev_gray = gray
             self._last_stamp = now
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
-            self._publish_pose(now.to_msg(), true_alt, q)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
 
         dt = (now - self._last_stamp).nanoseconds * 1e-9
         if dt <= 0.001:
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
-            self._publish_pose(now.to_msg(), true_alt, q)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
 
         raw_prev_pts = cv2.goodFeaturesToTrack(self.prev_gray, 100, 0.01, 10)
@@ -157,7 +183,7 @@ class OpticalFlowNode(Node):
             self.prev_gray = gray
             self._last_stamp = now
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
-            self._publish_pose(now.to_msg(), true_alt, q)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
 
         curr_pts, status, _ = cv2.calcOpticalFlowPyrLK(self.prev_gray, gray, raw_prev_pts, None)
@@ -167,24 +193,34 @@ class OpticalFlowNode(Node):
             self.prev_gray = gray
             self._last_stamp = now
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
-            self._publish_pose(now.to_msg(), true_alt, q)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
 
         undist_old = cv2.undistortPoints(good_old.reshape(-1,1,2), K, D).reshape(-1,2)
         undist_new = cv2.undistortPoints(good_new.reshape(-1,1,2), K, D).reshape(-1,2)
         flow_norm = np.mean(undist_new - undist_old, axis=0)
 
-        # Convert quaternion to yaw for world-frame integration.
-        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-        yaw = np.arctan2(siny_cosp, cosy_cosp)
+        visual_transform, _ = cv2.estimateAffinePartial2D(
+            undist_old,
+            undist_new,
+            method=cv2.RANSAC,
+            ransacReprojThreshold=0.01,
+        )
+        if visual_transform is not None:
+            image_yaw = np.arctan2(
+                visual_transform[1, 0],
+                visual_transform[0, 0],
+            )
+            self.visual_yaw += image_yaw
+        yaw = self.visual_yaw
 
         # ── Rotational Compensation ───────────────────────────────────────────
-        COMP_GAIN = 0.5
+        # COMP_GAIN = 0.0
+        COMP_GAIN = 1.45
         w = self._imu.angular_velocity
         # Compensation applied to normalized flow
         flow_norm[1] -= (w.y * dt) * COMP_GAIN
-        flow_norm[0] += (w.x * dt) * COMP_GAIN * 0.7
+        flow_norm[0] += (w.x * dt) * COMP_GAIN
 
         # ── Body-Frame Velocity (m/s) ─────────────────────────────────────────
         vx_body = -(flow_norm[1] * true_alt) / dt
@@ -197,22 +233,23 @@ class OpticalFlowNode(Node):
 
         # Integration in World Frame
         self._pos_n += v_north * dt
-        self._pos_e += v_east * dt
+        self._pos_w += v_east * dt
 
         # ── Publish ───────────────────────────────────────────────────────────
         stamp = now.to_msg()
+        visual_orientation = self._orientation_from_rpy(roll, pitch, yaw)
         
         # Velocity usually published in body frame for controllers
         self._publish_velocity(stamp, vx_body, vy_body)
 
         # Pose published in 'odom' (World-fixed North/East)
-        self._publish_pose(stamp, true_alt, q)
+        self._publish_pose(stamp, true_alt, visual_orientation)
         
         print(
             f"[Optical Flow] dt={dt:6.3f}s, \n"
             f"vx_body={vx_body:+8.2f} m/s, vy_body={vy_body:+8.2f} m/s, "
             f"vz={self.altitude_speed:+8.2f} m/s, \n"
-            f"pos_n={self._pos_n:+8.2f} m, pos_e={self._pos_e:+8.2f} m, "
+            f"pos_n={self._pos_n:+8.2f} m, pos_w={self._pos_w:+8.2f} m, "
             f"pos_z={true_alt:+8.2f} m, \norientation_euler_deg="
             f"(roll={np.degrees(roll):+8.2f}, pitch={np.degrees(pitch):+8.2f}, "
             f"yaw={np.degrees(yaw):+8.2f})\n"
@@ -221,7 +258,7 @@ class OpticalFlowNode(Node):
         self.prev_gray, self._last_stamp = gray, now
 
     def _reset_pose_cb(self, _req, res):
-        self._pos_n = self._pos_e = 0.0
+        self._pos_n = self._pos_w = 0.0
         return res
 
     def destroy_node(self):

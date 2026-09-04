@@ -35,6 +35,8 @@ kill:
 # 	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{command: 400, param1: 0.0, param2: 21196.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0}"
 # 	This also seems to work 100% of the time, and is much shorter
 	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{command: 400, param2: 21196.0}"
+status:
+	ros2 topic echo /uav/mavros/state
 takeoff:
 	make guided
 	make arm
@@ -67,7 +69,7 @@ mavros:
 #	make open-serial
 	ros2 launch uav_demo apm.launch
 flow:
-	python3 src/uav_demo/scripts/test_only/optical_flow/test3.py
+	python3 src/uav_demo/scripts/optical.flow.py
 viewframes:
 	ros2 run tf2_tools view_frames
 gcs:
