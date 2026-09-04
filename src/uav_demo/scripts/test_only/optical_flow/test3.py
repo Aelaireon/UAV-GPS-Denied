@@ -63,6 +63,9 @@ class OpticalFlowNode(Node):
         super().__init__('optical_flow_node')
         
         self.altitude = 0.2
+        self.altitude_speed = 0.0
+        self._last_altitude = None
+        self._last_altitude_time = None
         self._imu: Imu = None
         self.prev_gray = None
         self._last_stamp = None
@@ -83,8 +86,16 @@ class OpticalFlowNode(Node):
         self.create_service(Empty, '/drone/reset_pose', self._reset_pose_cb)
         self.timer = self.create_timer(1.0 / FPS, self._flow_callback)
 
-    def _alt_cb(self, msg): 
-        self.altitude = max(msg.range, 0.1)
+    def _alt_cb(self, msg):
+        altitude = max(msg.range, 0.1)
+        now = self.get_clock().now()
+        if self._last_altitude is not None and self._last_altitude_time is not None:
+            dt = (now - self._last_altitude_time).nanoseconds * 1e-9
+            if dt > 0.001:
+                self.altitude_speed = (altitude - self._last_altitude) / dt
+        self.altitude = altitude
+        self._last_altitude = altitude
+        self._last_altitude_time = now
 
     def _imu_cb(self, msg): 
         self._imu = msg
@@ -97,6 +108,14 @@ class OpticalFlowNode(Node):
         ps.pose.position.z = float(altitude)
         ps.pose.orientation = orientation
         self.pub_pose.publish(ps)
+
+    def _publish_velocity(self, stamp, vx, vy):
+        tw = TwistStamped()
+        tw.header.stamp, tw.header.frame_id = stamp, 'drone_base_link'
+        tw.twist.linear.x = float(vx)
+        tw.twist.linear.y = float(vy)
+        tw.twist.linear.z = float(self.altitude_speed)
+        self.pub_vel.publish(tw)
 
     def _flow_callback(self):
         now = self.get_clock().now()
@@ -114,6 +133,7 @@ class OpticalFlowNode(Node):
 
         frame = self._cam.get_frame()
         if frame is None:
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, q)
             return
 
@@ -122,11 +142,13 @@ class OpticalFlowNode(Node):
         if self.prev_gray is None:
             self.prev_gray = gray
             self._last_stamp = now
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, q)
             return
 
         dt = (now - self._last_stamp).nanoseconds * 1e-9
         if dt <= 0.001:
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, q)
             return
 
@@ -134,6 +156,7 @@ class OpticalFlowNode(Node):
         if raw_prev_pts is None:
             self.prev_gray = gray
             self._last_stamp = now
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, q)
             return
 
@@ -143,6 +166,7 @@ class OpticalFlowNode(Node):
         if len(good_old) < 8:
             self.prev_gray = gray
             self._last_stamp = now
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, q)
             return
 
@@ -179,13 +203,20 @@ class OpticalFlowNode(Node):
         stamp = now.to_msg()
         
         # Velocity usually published in body frame for controllers
-        tw = TwistStamped()
-        tw.header.stamp, tw.header.frame_id = stamp, 'drone_base_link'
-        tw.twist.linear.x, tw.twist.linear.y = float(vx_body), float(vy_body)
-        self.pub_vel.publish(tw)
+        self._publish_velocity(stamp, vx_body, vy_body)
 
         # Pose published in 'odom' (World-fixed North/East)
         self._publish_pose(stamp, true_alt, q)
+        
+        print(
+            f"[Optical Flow] dt={dt:6.3f}s, \n"
+            f"vx_body={vx_body:+8.2f} m/s, vy_body={vy_body:+8.2f} m/s, "
+            f"vz={self.altitude_speed:+8.2f} m/s, \n"
+            f"pos_n={self._pos_n:+8.2f} m, pos_e={self._pos_e:+8.2f} m, "
+            f"pos_z={true_alt:+8.2f} m, \norientation_euler_deg="
+            f"(roll={np.degrees(roll):+8.2f}, pitch={np.degrees(pitch):+8.2f}, "
+            f"yaw={np.degrees(yaw):+8.2f})\n"
+        )
 
         self.prev_gray, self._last_stamp = gray, now
 

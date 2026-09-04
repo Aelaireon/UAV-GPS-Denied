@@ -28,7 +28,8 @@ guided:
 alt-hold:
 	ros2 service call /uav/mavros/set_mode mavros_msgs/srv/SetMode "{custom_mode: 'ALT_HOLD'}"
 land:
-	ros2 service call /uav/mavros/set_mode mavros_msgs/srv/SetMode "{custom_mode: 'LAND'}"
+# 	ros2 service call /uav/mavros/set_mode mavros_msgs/srv/SetMode "{custom_mode: 'LAND'}"
+	python3 src/uav_demo/scripts/land.force.disarm.py
 kill:
 # 	This works 100% of the time, but it is long
 # 	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{command: 400, param1: 0.0, param2: 21196.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0}"
@@ -38,18 +39,16 @@ takeoff:
 	make guided
 	make arm
 	ros2 service call /uav/mavros/cmd/takeoff mavros_msgs/srv/CommandTOL "{altitude: 1.0}"
-setpoint-2.0m:
-	ros2 topic pub --rate 20 --times 100 /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped "{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 2.0}, orientation: {w: 1.0}}}"
+setpoint-1.1m:
+	ros2 topic pub --rate 20 --times 100 /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped "{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 1.1}, orientation: {w: 1.0}}}"
 setpoint-0.3m:
 	ros2 topic pub --rate 20 --times 100 /uav/mavros/setpoint_position/local geometry_msgs/msg/PoseStamped "{header: {frame_id: 'map'}, pose: {position: {x: 0.0, y: 0.0, z: 0.3}, orientation: {w: 1.0}}}"
 test-mavros:
 	echo -e "\033[1;36m############### TAKING OFF TO 1 METER ...###############\033[0m"
 	make takeoff | grep -E "success=|mode_sent=|GUIDED|arming"
 	sleep 5
-	echo -e "\033[1;36m################# GOING TO 2 METERS ...##################\033[0m"
-	make setpoint-2.0m | grep "beginning"
-	echo -e "\033[1;36m################ GOING TO 0.3 METERS ...#################\033[0m"
-	make setpoint-0.3m | grep "beginning"
+	echo -e "\033[1;36m################# GOING TO 1.1 METERS ...##################\033[0m"
+	make setpoint-1.1m | grep "beginning"
 	echo -e "\033[1;36m###################### LANDING ...#######################\033[0m"
 	make land | grep "mode_sent="
 stereo-test:
