@@ -67,6 +67,8 @@ stereo-vision-dist:
 mavros:
 #	make open-serial
 	ros2 launch uav_demo apm.launch
+flow:
+	python3 src/uav_demo/scripts/test_only/optical_flow/test3.py
 viewframes:
 	ros2 run tf2_tools view_frames
 gcs:

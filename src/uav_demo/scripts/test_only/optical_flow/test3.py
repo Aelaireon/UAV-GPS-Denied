@@ -89,24 +89,52 @@ class OpticalFlowNode(Node):
     def _imu_cb(self, msg): 
         self._imu = msg
 
-    def _flow_callback(self):
-        frame = self._cam.get_frame()
-        if frame is None or self._imu is None: return
+    def _publish_pose(self, stamp, altitude, orientation):
+        ps = PoseStamped()
+        ps.header.stamp, ps.header.frame_id = stamp, 'odom'
+        ps.pose.position.x = self._pos_n
+        ps.pose.position.y = self._pos_e
+        ps.pose.position.z = float(altitude)
+        ps.pose.orientation = orientation
+        self.pub_pose.publish(ps)
 
+    def _flow_callback(self):
         now = self.get_clock().now()
+        if self._imu is None: return
+
+        q = self._imu.orientation
+
+        sinr_cosp = 2 * (q.w * q.x + q.y * q.z)
+        cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y)
+        roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2 * (q.w * q.y - q.z * q.x)
+        pitch = np.arcsin(np.clip(sinp, -1.0, 1.0))
+        true_alt = self.altitude * np.cos(roll) * np.cos(pitch)
+
+        frame = self._cam.get_frame()
+        if frame is None:
+            self._publish_pose(now.to_msg(), true_alt, q)
+            return
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if self.prev_gray is None:
             self.prev_gray = gray
             self._last_stamp = now
+            self._publish_pose(now.to_msg(), true_alt, q)
             return
 
         dt = (now - self._last_stamp).nanoseconds * 1e-9
-        if dt <= 0.001: return
+        if dt <= 0.001:
+            self._publish_pose(now.to_msg(), true_alt, q)
+            return
 
         raw_prev_pts = cv2.goodFeaturesToTrack(self.prev_gray, 100, 0.01, 10)
         if raw_prev_pts is None:
             self.prev_gray = gray
+            self._last_stamp = now
+            self._publish_pose(now.to_msg(), true_alt, q)
             return
 
         curr_pts, status, _ = cv2.calcOpticalFlowPyrLK(self.prev_gray, gray, raw_prev_pts, None)
@@ -114,28 +142,18 @@ class OpticalFlowNode(Node):
 
         if len(good_old) < 8:
             self.prev_gray = gray
+            self._last_stamp = now
+            self._publish_pose(now.to_msg(), true_alt, q)
             return
 
         undist_old = cv2.undistortPoints(good_old.reshape(-1,1,2), K, D).reshape(-1,2)
         undist_new = cv2.undistortPoints(good_new.reshape(-1,1,2), K, D).reshape(-1,2)
         flow_norm = np.mean(undist_new - undist_old, axis=0)
 
-        # ── IMU Orientation Extraction ────────────────────────────────────────
-        q = self._imu.orientation
-        
-        # Convert Quaternion to Euler
-        sinr_cosp = 2 * (q.w * q.x + q.y * q.z)
-        cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y)
-        roll = np.arctan2(sinr_cosp, cosr_cosp)
-
-        sinp = 2 * (q.w * q.y - q.z * q.x)
-        pitch = np.arcsin(np.clip(sinp, -1.0, 1.0))
-
+        # Convert quaternion to yaw for world-frame integration.
         siny_cosp = 2 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
         yaw = np.arctan2(siny_cosp, cosy_cosp)
-
-        true_alt = self.altitude * np.cos(roll) * np.cos(pitch)
 
         # ── Rotational Compensation ───────────────────────────────────────────
         COMP_GAIN = 0.5
@@ -167,14 +185,7 @@ class OpticalFlowNode(Node):
         self.pub_vel.publish(tw)
 
         # Pose published in 'odom' (World-fixed North/East)
-        ps = PoseStamped()
-        ps.header.stamp, ps.header.frame_id = stamp, 'odom'
-        ps.pose.position.x = self._pos_n
-        ps.pose.position.y = self._pos_e
-        ps.pose.position.z = float(true_alt)
-        # Orientation matches heading
-        ps.pose.orientation = q 
-        self.pub_pose.publish(ps)
+        self._publish_pose(stamp, true_alt, q)
 
         self.prev_gray, self._last_stamp = gray, now
 
