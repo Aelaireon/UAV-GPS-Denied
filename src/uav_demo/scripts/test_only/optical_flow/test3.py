@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import subprocess
 import threading
 import numpy as np
 import cv2
@@ -24,50 +23,47 @@ else:
     D = np.zeros(5, dtype=np.float32)
 
 # ── Camera settings ───────────────────────────────────────────────────────────
-CAMERA_INDEX = 1 
+# USB webcams usually appear as /dev/video0, /dev/video1, etc.
+CAMERA_INDEX = 0
 FRAME_WIDTH  = 640
 FRAME_HEIGHT = 480
 FPS          = 30
 
-def make_rpicam_proc(camera_index: int) -> subprocess.Popen:
-    cmd = [
-        "rpicam-vid", "--camera", str(camera_index), "--codec", "mjpeg",
-        "-t", "0", "--width", str(FRAME_WIDTH), "--height", str(FRAME_HEIGHT),
-        "--framerate", str(FPS), "--nopreview", "--gain", "2.0", "-o", "-",
-    ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
 class CameraReader(threading.Thread):
-    def __init__(self, proc: subprocess.Popen):
+    def __init__(self, camera_index: int):
         super().__init__(daemon=True)
-        self._proc = proc
-        self._buffer = b""
+        self._cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Failed to open USB camera index {camera_index}")
+
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+        self._cap.set(cv2.CAP_PROP_FPS, FPS)
+        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+
         self._frame = None
         self._lock = threading.Lock()
 
     def run(self):
         while True:
-            chunk = self._proc.stdout.read(4096)
-            if not chunk: break
-            self._buffer += chunk
-            a, b = self._buffer.find(b'\xff\xd8'), self._buffer.find(b'\xff\xd9')
-            if a != -1 and b != -1:
-                jpg = self._buffer[a:b + 2]
-                self._buffer = self._buffer[b + 2:]
-                frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                if frame is not None:
-                    frame = cv2.rotate(frame, cv2.ROTATE_180)
-                    with self._lock: self._frame = frame
+            ok, frame = self._cap.read()
+            if not ok or frame is None:
+                break
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+            with self._lock: self._frame = frame
 
     def get_frame(self):
         with self._lock: return self._frame.copy() if self._frame is not None else None
+
+    def release(self):
+        self._cap.release()
 
 class OpticalFlowNode(Node):
     def __init__(self):
         super().__init__('optical_flow_node')
         
         self.altitude = 0.2
-        self._imu = None
+        self._imu: Imu = None
         self.prev_gray = None
         self._last_stamp = None
         
@@ -75,8 +71,7 @@ class OpticalFlowNode(Node):
         self._pos_n = 0.0
         self._pos_e = 0.0
 
-        self._proc = make_rpicam_proc(CAMERA_INDEX)
-        self._cam = CameraReader(self._proc)
+        self._cam = CameraReader(CAMERA_INDEX)
         self._cam.start()
 
         qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, depth=10)
@@ -188,7 +183,7 @@ class OpticalFlowNode(Node):
         return res
 
     def destroy_node(self):
-        self._proc.terminate()
+        self._cam.release()
         super().destroy_node()
 
 def main(args=None):
