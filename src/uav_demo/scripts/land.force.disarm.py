@@ -20,6 +20,7 @@ class ConstantVelocityLanding(Node):
 		self.landing_timeout = self.get_parameter('landing_timeout').value
 		self.altitude = None
 		self.landing_started = self.get_clock().now()
+		self.ground_detected_at = None
 		self.disarm_requested = False
 
 		self.velocity_pub = self.create_publisher(
@@ -93,14 +94,23 @@ class ConstantVelocityLanding(Node):
 
 		elapsed = (self.get_clock().now() - self.landing_started).nanoseconds * 1e-9
 		if self.altitude is not None and self.altitude <= self.ground_height:
-			self.get_logger().info(
-				f'Ground height reached ({self.altitude:.2f} m); requesting force disarm'
-			)
-			self._request_force_disarm()
+			now = self.get_clock().now()
+			if self.ground_detected_at is None:
+				self.ground_detected_at = now
+				self.get_logger().info(
+					f'Ground height reached ({self.altitude:.2f} m); '
+					'waiting 1 second before force disarm'
+				)
+			ground_duration = (now - self.ground_detected_at).nanoseconds * 1e-9
+			if ground_duration >= 1.0:
+				self._request_force_disarm()
+			else:
+				self._publish_stop()
 		elif elapsed >= self.landing_timeout:
 			self.get_logger().error('Landing timeout reached; stopping and requesting force disarm')
 			self._request_force_disarm()
 		else:
+			self.ground_detected_at = None
 			self._publish_descent()
 
 
