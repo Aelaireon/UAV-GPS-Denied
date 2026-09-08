@@ -74,7 +74,7 @@ class UAVGCSNode(Node):
         self.estop_wait_duration = 0.5
         self.uav_start_time = False
         self.time_since_start = 0
-        self.ugv_landed_flag = False
+        self.uav_landed_flag = False
         self.start_challenge = False
         
         # run publish at 10 Hz
@@ -158,23 +158,23 @@ class UAVGCSNode(Node):
             10
         )
         
-        self.ugv_msg_sub = self.create_subscription(
+        self.uav_msg_sub = self.create_subscription(
             String,
             '/ugv_to_uav',
-            self.ugv_msg_callback,
+            self.uav_msg_callback,
             qos_profile
         )
     
-    def ugv_msg_callback(self, msg: String):
+    def uav_msg_callback(self, msg: String):
         if msg.data == 'START_MOVING':
             self.get_logger().warn('Received START_MOVING message.')
-            self.ugv_landed_flag = False
+            self.uav_landed_flag = False
             self.start_challenge = True
             self.estop_status = False
             self.estop_publisher()
         # elif msg.data == 'ugv_LANDED':
         #     self.get_logger().warn('Received ugv_LANDED message.')
-        #     self.ugv_landed_flag = True
+        #     self.uav_landed_flag = True
         else:
             self.get_logger().warn(f'Received unexpected message on /ugv_to_uav: {msg.data}. Ignoring.')
             self.estop_status = False
