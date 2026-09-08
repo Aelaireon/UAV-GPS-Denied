@@ -19,9 +19,10 @@ class ConstantVelocityLanding(Node):
 		self.ground_height = self.get_parameter('ground_height').value
 		self.landing_timeout = self.get_parameter('landing_timeout').value
 		self.altitude = None
-		self.landing_started = self.get_clock().now()
+		self.landing_started = None
 		self.ground_detected_at = None
 		self.disarm_requested = False
+		self.landing_timer = None
 
 		self.velocity_pub = self.create_publisher(
 			TwistStamped,
@@ -38,7 +39,14 @@ class ConstantVelocityLanding(Node):
 			CommandLong,
 			'/uav/mavros/cmd/command',
 		)
-		self.timer = self.create_timer(0.05, self._landing_callback)
+		self.landing_timer = self.create_timer(0.05, self._landing_callback, autostart=False)
+
+	def start_landing(self):
+		self.landing_started = self.get_clock().now()
+		self.ground_detected_at = None
+		self.disarm_requested = False
+		self.get_logger().warn("UAV STARTING LANDING NOW")
+		self.landing_timer.reset()
 
 	def _range_callback(self, message):
 		if message.range >= message.min_range and message.range <= message.max_range:
@@ -64,7 +72,7 @@ class ConstantVelocityLanding(Node):
 		self._publish_stop()
 		if not self.disarm_client.wait_for_service(timeout_sec=1.0):
 			self.get_logger().error('Arming service is unavailable; vehicle was stopped but not disarmed')
-			self.timer.cancel()
+			self.landing_timer.cancel()
 			return
 
 		request = CommandLong.Request()
@@ -86,10 +94,11 @@ class ConstantVelocityLanding(Node):
 		except Exception as error:
 			self.get_logger().error(f'Force disarm service call failed: {error}')
 		finally:
-			self.timer.cancel()
+			self.landing_timer.cancel()
 
 	def _landing_callback(self):
 		if self.disarm_requested:
+			self.get_logger().warning("Already disarming")
 			return
 
 		elapsed = (self.get_clock().now() - self.landing_started).nanoseconds * 1e-9

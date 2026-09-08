@@ -89,7 +89,8 @@ class TFMiniNode(Node):
         rng.header.frame_id = "lidar"
         rng.radiation_type = 1
         rng.field_of_view = 0.0628
-        rng.min_range = 0.1
+        # rng.min_range = 0.1
+        rng.min_range = 0.05
         # rng.max_range = 12.0 # indoors/high reflectivity
         rng.max_range = 7.0 # outdoors/low reflectivity/football field grass
         rng.range = float(current_range)

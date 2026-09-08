@@ -9,6 +9,8 @@ import math
 import threading
 
 import rclpy
+from land_force_disarm import ConstantVelocityLanding
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node, QoSProfile
 from rclpy.qos import ReliabilityPolicy, DurabilityPolicy
 from mavros_msgs.srv import CommandLong
@@ -31,6 +33,8 @@ class UAVSubsystem(Node):
         super().__init__('uav_node')
         
         self.init_pub_sub()
+        
+        self.land_disarm_command_node = ConstantVelocityLanding()
         
         self.goal_pose = None
         self.prev_goal_pose = None
@@ -74,8 +78,7 @@ class UAVSubsystem(Node):
         self.estop_sub = self.create_subscription(
             Bool,
             '/uav/estop',
-            self.
-            estop_callback,
+            self.estop_callback,
             10
         )
         
@@ -127,11 +130,7 @@ class UAVSubsystem(Node):
             if self.gcs_heartbeat_count == 0:
                 if not self.encountered_heartbeat:
                     self.encountered_heartbeat = True
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
+                    self.land_and_disarm()
                     self.get_logger().warn(f"GCS heartbeat lost, E-STOP on, stopping UAV ...")
                 self.estop_flag = True
             else:
@@ -145,16 +144,16 @@ class UAVSubsystem(Node):
             if self.estop_flag:
                 if not self.encountered_estop:
                     self.encountered_estop = True
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
-                    # self.stop()
+                    self.land_and_disarm()
                     self.get_logger().warn(f"E-STOP detected: {self.estop_flag}, stopping UAV ...")
             else:
                 if self.encountered_estop:
                     self.encountered_estop = False
                     self.get_logger().warn(f"E-STOP detected: {self.estop_flag}, running UAV ...")
+    
+    def land_and_disarm(self):
+        # Calls node in land.force.disarm.py file to start the landing process, expect a code returned
+        self.land_disarm_command_node.start_landing()
     
     # def cmd_vel_callback(self, msg: Twist):
     #     cmd_linear_x = msg.linear.x
@@ -163,7 +162,7 @@ class UAVSubsystem(Node):
     #     self.target_vel_m_s = cmd_linear_x
     #     self.target_yaw_rad_s = -msg.angular.z if self.target_vel_m_s > 0 else msg.angular.z
     #     if not self.exit_flag: self.drive(self.target_yaw_rad_s, self.target_vel_m_s, self.wheelbase)
-    #     else: self.stop()
+    #     else: self.land_and_disarm()
 
     def velocity_body_callback(self, msg: TwistStamped):
         # probably not accurate, but close enough
@@ -173,7 +172,10 @@ class UAVSubsystem(Node):
 
     def run(self):
         self.get_logger().info("UAV Subsystem Node is running. Waiting for uav_cmd_vel messages...")
-        rclpy.spin(self)  # Blocks here, processes callbacks as they arrive
+        executor = SingleThreadedExecutor()
+        executor.add_node(self)
+        executor.add_node(self.land_disarm_command_node)
+        executor.spin()
         self.get_logger().info("UAV Subsystem Node is shutting down.")
 
 def main(args=None):
@@ -189,8 +191,9 @@ def main(args=None):
     finally:
         # Wait for the stop commands to complete before shutting down the node
         node.exit_flag = True
+        node.land_disarm_command_node.destroy_node()
         node.destroy_node()
-        # rclpy.shutdown()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
