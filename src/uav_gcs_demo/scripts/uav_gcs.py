@@ -62,7 +62,34 @@ class UAVGCSNode(Node):
 
     def __init__(self) -> None:
         super().__init__("uav_gcs_node")
+        
+        self.init_pub_sub()
 
+        self.start_time_sys = datetime.now()
+        
+        self.lock = threading.Lock()
+        
+        self.heartbeat_threshold = 10
+        self.uav_heartbeat_count = 0
+        self.estop_wait_duration = 0.5
+        self.uav_start_time = False
+        self.time_since_start = 0
+        self.ugv_landed_flag = False
+        self.start_challenge = False
+        
+        # run publish at 10 Hz
+        self.print_out_timer = self.create_timer(0.3, self.print_out)
+        self.heartbeat_timer = self.create_timer(0.1, self.gcs_heartbeat_publisher)
+        # self.estop_timer = self.create_timer(0.1, self.estop_publisher)
+        self.check_uav_heartbeat_timer = self.create_timer(0.3, self.check_uav_heartbeat) # Check heartbeat at 3 Hz, should be sufficient to detect loss within 0.6 second
+        self.release_estop_timer = self.create_timer(self.estop_wait_duration, self.release_estop_uav, autostart=False) # Arm UAV after 2 seconds, count starts when both cancel estop keys are pressed and held
+        self.release_estop_timer_started = False
+
+        # Collect events until released
+        self.my_keyboard = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
+        self.my_keyboard.start()
+        
+    def init_pub_sub(self):
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT, # or RELIABLE
             history=HistoryPolicy.KEEP_LAST,
@@ -127,7 +154,7 @@ class UAVGCSNode(Node):
         
         self.gcs_heartbeat_pub = self.create_publisher(
             Bool,
-            "/gcs/heartbeat",
+            "/gcs/uav/heartbeat",
             10
         )
         
@@ -137,30 +164,6 @@ class UAVGCSNode(Node):
             self.ugv_msg_callback,
             qos_profile
         )
-
-        self.start_time_sys = datetime.now()
-        
-        self.lock = threading.Lock()
-        
-        self.heartbeat_threshold = 10
-        self.uav_heartbeat_count = 0
-        self.estop_wait_duration = 0.5
-        self.uav_start_time = False
-        self.time_since_start = 0
-        self.ugv_landed_flag = False
-        self.start_challenge = False
-        
-        # run publish at 10 Hz
-        self.print_out_timer = self.create_timer(0.3, self.print_out)
-        self.heartbeat_timer = self.create_timer(0.1, self.gcs_heartbeat_publisher)
-        # self.estop_timer = self.create_timer(0.1, self.estop_publisher)
-        self.check_uav_heartbeat_timer = self.create_timer(0.3, self.check_uav_heartbeat) # Check heartbeat at 3 Hz, should be sufficient to detect loss within 0.6 second
-        self.release_estop_timer = self.create_timer(self.estop_wait_duration, self.release_estop_uav, autostart=False) # Arm UAV after 2 seconds, count starts when both cancel estop keys are pressed and held
-        self.release_estop_timer_started = False
-
-        # Collect events until released
-        self.my_keyboard = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
-        self.my_keyboard.start()
     
     def ugv_msg_callback(self, msg: String):
         if msg.data == 'START_MOVING':
