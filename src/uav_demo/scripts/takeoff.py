@@ -34,7 +34,7 @@ class Takeoff(Node):
 			return None
 		return future.result()
 
-	def run(self):
+	def takeoff(self):
 		mode_request = SetMode.Request()
 		mode_request.base_mode = 0
 		mode_request.custom_mode = 'GUIDED'
@@ -77,7 +77,7 @@ def main(args=None):
 	rclpy.init(args=args)
 	node = Takeoff()
 	try:
-		node.run()
+		node.takeoff()
 	finally:
 		node.destroy_node()
 		rclpy.shutdown()

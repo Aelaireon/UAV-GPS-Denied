@@ -10,6 +10,7 @@ import threading
 
 import rclpy
 from land_force_disarm import ConstantVelocityLanding
+from takeoff import Takeoff
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node, QoSProfile
 from rclpy.qos import ReliabilityPolicy, DurabilityPolicy
@@ -35,7 +36,9 @@ class UAVSubsystem(Node):
         self.init_pub_sub()
         
         self.land_disarm_command_node = ConstantVelocityLanding()
+        self.takeoff_command_node = Takeoff()
         
+        self.takeoff_status = False
         self.goal_pose = None
         self.prev_goal_pose = None
         self.exit_flag = False
@@ -150,6 +153,10 @@ class UAVSubsystem(Node):
                 if self.encountered_estop:
                     self.encountered_estop = False
                     self.get_logger().warn(f"E-STOP detected: {self.estop_flag}, running UAV ...")
+                    self.takeoff()
+                    
+    def takeoff(self):
+        self.takeoff_status = self.takeoff_command_node.takeoff()
     
     def land_and_disarm(self):
         # Calls node in land.force.disarm.py file to start the landing process, expect a code returned
@@ -175,6 +182,7 @@ class UAVSubsystem(Node):
         executor = SingleThreadedExecutor()
         executor.add_node(self)
         executor.add_node(self.land_disarm_command_node)
+        executor.add_node(self.takeoff_command_node)
         executor.spin()
         self.get_logger().info("UAV Subsystem Node is shutting down.")
 
