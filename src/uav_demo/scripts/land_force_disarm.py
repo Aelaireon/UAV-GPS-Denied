@@ -12,7 +12,7 @@ class ConstantVelocityLanding(Node):
 		super().__init__('constant_velocity_landing')
 
 		self.declare_parameter('descent_speed', 0.10)
-		self.declare_parameter('ground_height', 0.15)
+		self.declare_parameter('ground_height', 0.20)
 		self.declare_parameter('landing_timeout', 60.0)
 
 		self.descent_speed = abs(self.get_parameter('descent_speed').value)
@@ -67,6 +67,7 @@ class ConstantVelocityLanding(Node):
 
 	def _request_force_disarm(self):
 		if self.disarm_requested:
+			self.get_logger().warning("Already disarming")
 			return
 		self.disarm_requested = True
 		self._publish_stop()
@@ -98,7 +99,6 @@ class ConstantVelocityLanding(Node):
 
 	def _landing_callback(self):
 		if self.disarm_requested:
-			self.get_logger().warning("Already disarming")
 			return
 
 		elapsed = (self.get_clock().now() - self.landing_started).nanoseconds * 1e-9

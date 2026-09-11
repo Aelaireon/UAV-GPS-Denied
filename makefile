@@ -35,6 +35,8 @@ kill:
 # 	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{command: 400, param1: 0.0, param2: 21196.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0}"
 # 	This also seems to work 100% of the time, and is much shorter
 	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{command: 400, param2: 21196.0}"
+reboot-fcu:
+	ros2 service call /uav/mavros/cmd/command mavros_msgs/srv/CommandLong "{broadcast: false, command: 246, param1: 1.0,}"
 status:
 	ros2 topic echo /uav/mavros/state
 takeoff:

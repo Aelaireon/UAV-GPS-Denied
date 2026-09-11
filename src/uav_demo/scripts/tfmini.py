@@ -17,7 +17,7 @@ class TFMiniNode(Node):
         # Serial Setup
         self.sensor = None
         self.publish_fake_vision = False # use until optical flow is working
-        self.ground_offset = -0.08
+        self.ground_offset = 0.09
         # self.ground_offset = 0.0
         self.current_range_m = 0.0
 
@@ -38,7 +38,7 @@ class TFMiniNode(Node):
         self.reader_thread = threading.Thread(target=self.read_loop, daemon=True)
         self.reader_thread.start()
 
-        # Publish at 20Hz
+        # Publish at 10Hz
         self.timer = self.create_timer(0.1, self.publish_data)
 
     def read_loop(self):
@@ -70,7 +70,7 @@ class TFMiniNode(Node):
                     self.ground_offset = distance_m
                     self.get_logger().info(f"Ground offset captured: {self.ground_offset:.3f}m")
 
-                self.current_range_m = distance_m - self.ground_offset
+                self.current_range_m = distance_m + self.ground_offset
                 self.get_logger().info(f"Height: {self.current_range_m}")
             except Exception as e:
                 self.get_logger().warn(f"TFMini read error: {e}")

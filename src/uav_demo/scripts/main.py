@@ -38,7 +38,7 @@ class UAVSubsystem(Node):
         self.land_disarm_command_node = ConstantVelocityLanding()
         self.takeoff_command_node = Takeoff()
         
-        self.takeoff_status = False
+        self.takeoff_flag = False
         self.goal_pose = None
         self.prev_goal_pose = None
         self.exit_flag = False
@@ -156,7 +156,9 @@ class UAVSubsystem(Node):
                     self.takeoff()
                     
     def takeoff(self):
-        self.takeoff_status = self.takeoff_command_node.takeoff()
+        self.takeoff_flag = self.takeoff_command_node.takeoff()
+        if not self.takeoff_flag:
+            self.land_and_disarm()
     
     def land_and_disarm(self):
         # Calls node in land.force.disarm.py file to start the landing process, expect a code returned
