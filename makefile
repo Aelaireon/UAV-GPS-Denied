@@ -71,7 +71,7 @@ mavros:
 #	make open-serial
 	ros2 launch uav_demo apm.launch
 flow:
-	python3 src/uav_demo/scripts/optical.flow.py
+	python3 src/uav_demo/scripts/optical_flow.py
 viewframes:
 	ros2 run tf2_tools view_frames
 gcs:
