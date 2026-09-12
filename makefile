@@ -76,7 +76,7 @@ viewframes:
 	ros2 run tf2_tools view_frames
 gcs:
 # 	ros2 launch gcs_demo bringup.launch.py # Not color decorated for some reason, but it works
-	python3 ./src/gcs_demo/src/gcs.py # This is naturally color decorated to make reading warnings and errors easier
+	python3 ./src/uav_gcs_demo/scripts/uav_gcs.py # This is naturally color decorated to make reading warnings and errors easier
 estop:
 	ros2 topic pub --once /uav_estop std_msgs/msg/Bool "{data: true}" &
 	ros2 topic pub --once /uav_estop std_msgs/msg/Bool "{data: true}" &

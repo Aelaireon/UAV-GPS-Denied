@@ -11,13 +11,14 @@ class ConstantVelocityLanding(Node):
 	def __init__(self):
 		super().__init__('constant_velocity_landing')
 
-		self.declare_parameter('descent_speed', 0.10)
+		self.declare_parameter('descent_speed', 0.20)
 		self.declare_parameter('ground_height', 0.20)
 		self.declare_parameter('landing_timeout', 60.0)
 
 		self.descent_speed = abs(self.get_parameter('descent_speed').value)
 		self.ground_height = self.get_parameter('ground_height').value
 		self.landing_timeout = self.get_parameter('landing_timeout').value
+		self.max_descent_speed = 0.20
 		self.altitude = None
 		self.landing_started = None
 		self.ground_detected_at = None
@@ -47,6 +48,11 @@ class ConstantVelocityLanding(Node):
 		self.disarm_requested = False
 		self.get_logger().warn("UAV STARTING LANDING NOW")
 		self.landing_timer.reset()
+  
+	def set_descent_speed(self, speed):
+		speed = abs(speed)
+		# self.descent_speed = speed if speed < self.max_descent_speed else self.descent_speed
+		self.descent_speed = speed if speed < self.max_descent_speed else self.max_descent_speed
 
 	def _range_callback(self, message):
 		if message.range >= message.min_range and message.range <= message.max_range:
