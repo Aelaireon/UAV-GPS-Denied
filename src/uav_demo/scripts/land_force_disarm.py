@@ -12,12 +12,13 @@ class ConstantVelocityLanding(Node):
 		super().__init__('constant_velocity_landing')
 
 		self.declare_parameter('descent_speed', 0.20)
-		self.declare_parameter('ground_height', 0.20)
+		self.declare_parameter('ground_height', 0.25)
 		self.declare_parameter('landing_timeout', 60.0)
 
 		self.descent_speed = abs(self.get_parameter('descent_speed').value)
 		self.ground_height = self.get_parameter('ground_height').value
 		self.landing_timeout = self.get_parameter('landing_timeout').value
+		self.land_duration = 0.7
 		self.max_descent_speed = 0.20
 		self.altitude = None
 		self.landing_started = None
@@ -117,7 +118,7 @@ class ConstantVelocityLanding(Node):
 					'waiting 1 second before force disarm'
 				)
 			ground_duration = (now - self.ground_detected_at).nanoseconds * 1e-9
-			if ground_duration >= 1.0:
+			if ground_duration >= self.land_duration:
 				self._request_force_disarm()
 			else:
 				self._publish_stop()

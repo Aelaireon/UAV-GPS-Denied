@@ -20,15 +20,17 @@ if os.path.exists(NPZ_PATH):
         K = data['K_l'].astype(np.float32)
         D = data['D_l'].astype(np.float32)
 else:
-    K = np.array([[600.0, 0, 320], [0, 600.0, 240], [0, 0, 1]], dtype=np.float32)
+    K = np.array([[343.0, 0, 320], [0, 343.0, 320], [0, 0, 1]], dtype=np.float32)
     D = np.zeros(5, dtype=np.float32)
 
 # ── Camera settings ───────────────────────────────────────────────────────────
-# USB webcams usually appear as /dev/video0, /dev/video1, etc.
+# Arducam UC-A43REV.A exposes the Pi camera through UVC.
 CAMERA_INDEX = 0
-FRAME_WIDTH  = 640
-FRAME_HEIGHT = 480
+FRAME_WIDTH  = 1280
+FRAME_HEIGHT = 720
 FPS          = 30
+PROCESS_SIZE = 640
+FOCUS_ABSOLUTE = 205  # Approx. 0.5 m on the 1..1023 UVC focus scale.
 
 class CameraReader(threading.Thread):
     def __init__(self, camera_index: int):
@@ -36,6 +38,9 @@ class CameraReader(threading.Thread):
         self._cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
         if not self._cap.isOpened():
             raise RuntimeError(f"Failed to open USB camera index {camera_index}")
+
+        self._cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        self._cap.set(cv2.CAP_PROP_FOCUS, FOCUS_ABSOLUTE)
 
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
@@ -51,6 +56,16 @@ class CameraReader(threading.Thread):
             if not ok or frame is None:
                 break
             frame = cv2.rotate(frame, cv2.ROTATE_180)
+            height, width = frame.shape[:2]
+            crop_size = min(height, width)
+            left = (width - crop_size) // 2
+            top = (height - crop_size) // 2
+            frame = frame[top:top + crop_size, left:left + crop_size]
+            frame = cv2.resize(
+                frame,
+                (PROCESS_SIZE, PROCESS_SIZE),
+                interpolation=cv2.INTER_AREA,
+            )
             with self._lock: self._frame = frame
 
     def get_frame(self):
@@ -67,10 +82,16 @@ class OpticalFlowNode(Node):
         self.altitude_speed = 0.0
         self._last_altitude = None
         self._last_altitude_time = None
+        self._altitude_motion_until = None
         self._imu: Imu = None
         self.prev_gray = None
         self._last_stamp = None
-        self.visual_yaw = 0.0
+        self._imu_yaw_offset = None
+        self._filtered_vx = 0.0
+        self._filtered_vy = 0.0
+        self._velocity_filter_alpha = 0.2
+        self._velocity_deadband = 0.03
+        self._rotation_compensation_gain = 1.0
         
         # World-frame positions (North/West)
         self._pos_n = 0.0
@@ -99,6 +120,8 @@ class OpticalFlowNode(Node):
             dt = (now - self._last_altitude_time).nanoseconds * 1e-9
             if dt > 0.001:
                 self.altitude_speed = (altitude - self._last_altitude) / dt
+                if abs(self.altitude_speed) > 0.15:
+                    self._altitude_motion_until = now.nanoseconds + 300_000_000
         self.altitude = altitude
         self._last_altitude = altitude
         self._last_altitude_time = now
@@ -150,11 +173,20 @@ class OpticalFlowNode(Node):
 
         sinp = 2 * (q.w * q.y - q.z * q.x)
         pitch = np.arcsin(np.clip(sinp, -1.0, 1.0))
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        imu_yaw = np.arctan2(siny_cosp, cosy_cosp)
+        if self._imu_yaw_offset is None:
+            self._imu_yaw_offset = imu_yaw
+        yaw = np.arctan2(
+            np.sin(imu_yaw - self._imu_yaw_offset),
+            np.cos(imu_yaw - self._imu_yaw_offset),
+        )
         true_alt = self.altitude * np.cos(roll) * np.cos(pitch)
         visual_orientation = self._orientation_from_rpy(
             roll,
             pitch,
-            self.visual_yaw,
+            yaw,
         )
 
         frame = self._cam.get_frame()
@@ -174,6 +206,15 @@ class OpticalFlowNode(Node):
 
         dt = (now - self._last_stamp).nanoseconds * 1e-9
         if dt <= 0.001:
+            self._publish_velocity(now.to_msg(), 0.0, 0.0)
+            self._publish_pose(now.to_msg(), true_alt, visual_orientation)
+            return
+
+        if self._altitude_motion_until is not None and now.nanoseconds < self._altitude_motion_until:
+            self.prev_gray = gray
+            self._last_stamp = now
+            self._filtered_vx = 0.0
+            self._filtered_vy = 0.0
             self._publish_velocity(now.to_msg(), 0.0, 0.0)
             self._publish_pose(now.to_msg(), true_alt, visual_orientation)
             return
@@ -198,33 +239,45 @@ class OpticalFlowNode(Node):
 
         undist_old = cv2.undistortPoints(good_old.reshape(-1,1,2), K, D).reshape(-1,2)
         undist_new = cv2.undistortPoints(good_new.reshape(-1,1,2), K, D).reshape(-1,2)
-        flow_norm = np.mean(undist_new - undist_old, axis=0)
 
-        visual_transform, _ = cv2.estimateAffinePartial2D(
+        _, inlier_mask = cv2.estimateAffinePartial2D(
             undist_old,
             undist_new,
             method=cv2.RANSAC,
             ransacReprojThreshold=0.01,
         )
-        if visual_transform is not None:
-            image_yaw = np.arctan2(
-                visual_transform[1, 0],
-                visual_transform[0, 0],
+
+        if inlier_mask is not None and np.count_nonzero(inlier_mask) >= 8:
+            inliers = inlier_mask.ravel().astype(bool)
+            flow_norm = np.median(
+                undist_new[inliers] - undist_old[inliers],
+                axis=0,
             )
-            self.visual_yaw += image_yaw
-        yaw = self.visual_yaw
+        else:
+            flow_norm = np.median(undist_new - undist_old, axis=0)
 
         # ── Rotational Compensation ───────────────────────────────────────────
-        # COMP_GAIN = 0.0
-        COMP_GAIN = 1.45
         w = self._imu.angular_velocity
         # Compensation applied to normalized flow
-        flow_norm[1] -= (w.y * dt) * COMP_GAIN
-        flow_norm[0] += (w.x * dt) * COMP_GAIN
+        flow_norm[1] -= (w.y * dt) * self._rotation_compensation_gain
+        flow_norm[0] += (w.x * dt) * self._rotation_compensation_gain
 
         # ── Body-Frame Velocity (m/s) ─────────────────────────────────────────
-        vx_body = -(flow_norm[1] * true_alt) / dt
-        vy_body = -(flow_norm[0] * true_alt) / dt
+        raw_vx_body = -(flow_norm[1] * true_alt) / dt
+        raw_vy_body = -(flow_norm[0] * true_alt) / dt
+        alpha = self._velocity_filter_alpha
+        self._filtered_vx = alpha * raw_vx_body + (1.0 - alpha) * self._filtered_vx
+        self._filtered_vy = alpha * raw_vy_body + (1.0 - alpha) * self._filtered_vy
+        vx_body = (
+            0.0
+            if abs(self._filtered_vx) < self._velocity_deadband
+            else self._filtered_vx
+        )
+        vy_body = (
+            0.0
+            if abs(self._filtered_vy) < self._velocity_deadband
+            else self._filtered_vy
+        )
 
         # ── World-Frame Velocity (Global Rotation) ────────────────────────────
         # Rotate body velocities by Yaw to get World N/E velocities
@@ -245,15 +298,15 @@ class OpticalFlowNode(Node):
         # Pose published in 'odom' (World-fixed North/East)
         self._publish_pose(stamp, true_alt, visual_orientation)
         
-        print(
-            f"[Optical Flow] dt={dt:6.3f}s, \n"
-            f"vx_body={vx_body:+8.2f} m/s, vy_body={vy_body:+8.2f} m/s, "
-            f"vz={self.altitude_speed:+8.2f} m/s, \n"
-            f"pos_n={self._pos_n:+8.2f} m, pos_w={self._pos_w:+8.2f} m, "
-            f"pos_z={true_alt:+8.2f} m, \norientation_euler_deg="
-            f"(roll={np.degrees(roll):+8.2f}, pitch={np.degrees(pitch):+8.2f}, "
-            f"yaw={np.degrees(yaw):+8.2f})\n"
-        )
+        # print(
+        #     f"[Optical Flow] dt={dt:6.3f}s, \n"
+        #     f"vx_body={vx_body:+8.2f} m/s, vy_body={vy_body:+8.2f} m/s, "
+        #     f"vz={self.altitude_speed:+8.2f} m/s, \n"
+        #     f"pos_n={self._pos_n:+8.2f} m, pos_w={self._pos_w:+8.2f} m, "
+        #     f"pos_z={true_alt:+8.2f} m, \norientation_euler_deg="
+        #     f"(roll={np.degrees(roll):+8.2f}, pitch={np.degrees(pitch):+8.2f}, "
+        #     f"yaw={np.degrees(yaw):+8.2f})\n"
+        # )
 
         self.prev_gray, self._last_stamp = gray, now
 
