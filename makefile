@@ -72,6 +72,8 @@ mavros:
 	ros2 launch uav_demo apm.launch
 flow:
 	python3 src/uav_demo/scripts/optical_flow.py
+uav-node:
+	python3 src/uav_demo/scripts/main.py
 viewframes:
 	ros2 run tf2_tools view_frames
 gcs:
