@@ -108,12 +108,12 @@ class OpticalFlowNode(Node):
 
     def _publish_pose(self, stamp, altitude, orientation):
         ps = PoseStamped()
-        ps.header.stamp, ps.header.frame_id = stamp, 'odom'
-        ps.pose.position.x = self._pos_n
-        ps.pose.position.y = self._pos_w
-        ps.pose.position.z = float(altitude)
-        ps.pose.orientation = orientation
-        self.pub_pose.publish(ps)
+        # ps.header.stamp, ps.header.frame_id = stamp, 'odom'
+        # ps.pose.position.x = self._pos_n
+        # ps.pose.position.y = self._pos_w
+        # ps.pose.position.z = float(altitude)
+        # ps.pose.orientation = orientation
+        # self.pub_pose.publish(ps)
 
     def _orientation_from_rpy(self, roll, pitch, yaw):
         cy = np.cos(yaw * 0.5)
@@ -135,7 +135,7 @@ class OpticalFlowNode(Node):
         tw.header.stamp, tw.header.frame_id = stamp, 'drone_base_link'
         tw.twist.linear.x = float(vx)
         tw.twist.linear.y = float(vy)
-        tw.twist.linear.z = float(self.altitude_speed)
+        # tw.twist.linear.z = float(self.altitude_speed)
         self.pub_vel.publish(tw)
 
     def _flow_callback(self):
