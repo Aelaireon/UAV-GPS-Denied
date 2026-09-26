@@ -23,7 +23,27 @@ UAV stands for Unmanned Aerial Vehicle. This repository contains code to fly the
     source /opt/ros/jazzy/setup.bash # ROS 2
     source install/setup.bash # Workspace
     ```
-8. To start Challenge 1 node:
+2. Run the make command to colcon build:
     ```bash
-    make challenge-1
+    make
+    ```
+3. You will need the gcs node up on the gcs computer:
+    ```bash
+    make gcs
+    ```
+4. You will need the mavros node up on the UAV:
+    ```bash
+    make mavros
+    ```
+5. You will need the flight node up on the UAV:
+    ```bash
+    make uav
+    ```
+6. You will need the tfminiplus node up on the UAV:
+    ```bash
+    make tfmini
+    ```
+7. You may need the optical flow node up on the UAV:
+    ```bash
+    make flow
     ```
