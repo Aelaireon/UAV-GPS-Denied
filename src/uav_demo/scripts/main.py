@@ -38,7 +38,7 @@ class UAVSubsystem(Node):
         
         self.land_disarm_command_node = ConstantVelocityLanding()
         self.takeoff_command_node = Takeoff()
-        self.flow_command_node = OpticalFlowNode()
+        # self.flow_command_node = OpticalFlowNode()
         
         self.takeoff_flag = False
         self.goal_pose = None
@@ -187,7 +187,7 @@ class UAVSubsystem(Node):
         executor.add_node(self)
         executor.add_node(self.land_disarm_command_node)
         executor.add_node(self.takeoff_command_node)
-        executor.add_node(self.flow_command_node)
+        # executor.add_node(self.flow_command_node)
         executor.spin()
         self.get_logger().info("UAV Subsystem Node is shutting down.")
 
